@@ -10,7 +10,8 @@ def get_parse():
 	argparser.add_argument('--input_dim', type=int, default=100, help='input feature dimension of LSTM')	
 	argparser.add_argument('--timestep', type=int, default=24,help="the window length of data")
 	argparser.add_argument('--num_for_predict', type=int, default=1, help='how many steps we would like to predict for the future')
-	argparser.add_argument('--test_days', type=int, default=7,help="the number of days for test data")
+	argparser.add_argument('--val_ratio', type=float, default=0.2)
+	argparser.add_argument('--test_ratio', type=float, default=0.2)
 
 	# LSTM模型 训练时的参数设置
 	argparser.add_argument('--hidden_size', type=int, default=64,  help='hidden neurons of LSTM layer')
@@ -24,14 +25,31 @@ def get_parse():
 	return argparser.parse_args()
 
 
+def read_txt_file(args):
+		f = open("datasets/{}.txt".format(args.data_name),"r")
+		data = []
+		for line in f:
+			rs = line.replace("\n","").split(",")
+			data.append(rs)
+		return np.array(data)
 
 
 def load_data(args):
-	data = pd.read_csv("datasets/raw_data.csv")
-	data = np.array(data)[:, 1:]
-	
+    
+	if args.data_name == "cellular_traffic":
+		data = pd.read_csv("datasets/cellular_traffic.csv")
+		data = np.array(data)[:, 1:]
+
+	elif args.data_name in ["exchange_rate", "electricity", "solar-energy", "traffic"]:
+		data = read_txt_file(args)
+		
+		print("data shape", data.shape)
+	else:
+		print("please find out the dataset!")
+
+	val_len, test_len = int(len(data) * args.val_ratio), int(len(data) * args.test_ratio)
 	mmn = MinMaxScaler()
-	mmn.fit(data[:-args.test_days * 24])
+	mmn.fit(data[: -test_len])
 	normalized_data = mmn.transform(data)
 
 	X, Y = [], []
@@ -40,9 +58,9 @@ def load_data(args):
 		Y.append(normalized_data[i + args.timestep])
 	X, Y = np.array(X), np.array(Y)
 
-	train_x, test_x = X[:-args.test_days * 24], X[-args.test_days * 24:]
-	train_y, test_y = Y[:-args.test_days * 24], Y[-args.test_days * 24:]
-	return train_x, train_y, test_x, test_y, mmn
+	train_x,val_x, test_x = X[:-(test_len+val_len)], X[-(test_len+val_len):-test_len], X[-test_len:]
+	train_y, val_y,test_y = Y[:-(test_len+val_len)], Y[-(test_len+val_len):-test_len], Y[-test_len:]
+	return train_x, train_y,val_x,val_y, test_x, test_y, mmn
 	
 
 
